@@ -1,4 +1,4 @@
-package com.craftinginterpreteres.lox;
+package com.craftinginterpreters.lox;
 
 /**
  * Literal value: converted textual representation of a value to the living runtime object
