@@ -37,11 +37,17 @@ public class GenerateAst {
 
     writer.println("package com.craftinginterpreters.lox;");
     writer.println();
-    writer.println("import com.craftinginterpreteres.lox.Token;");
+    writer.println("import com.craftinginterpreters.lox.Token;");
     writer.println();
     writer.println("import java.util.List;");
     writer.println();
     writer.println("abstract class " + baseName + " {");
+
+    // define Visitor interface
+    writer.println();
+    writer.println("  abstract <R> R accept(Visitor<R> visitor);");
+    defineVisitor(writer, baseName, types);
+    writer.println();
 
     for (String type: types) {
       String className = type.split(":")[0].trim();
@@ -53,6 +59,25 @@ public class GenerateAst {
     writer.println("}");
     writer.close();
   }
+
+
+  private static void defineVisitor(
+      PrintWriter writer, String baseName, List<String> types
+  ) {
+    writer.println("  interface Visitor<R> {");
+
+    for (String type: types) {
+      String typename = type.split(":")[0].trim();
+      String visit = String.format(
+          "    R visit%s%s(%s %s);",
+          typename, baseName, typename, baseName.toLowerCase()
+      );
+      writer.println(visit);
+    }
+
+    writer.println("  }");
+  }
+
 
   private static void defineType(
       PrintWriter writer, String baseName, String className, String fieldList
@@ -81,6 +106,14 @@ public class GenerateAst {
     }
 
     writer.println("      }");
+
+    writer.println();
+    writer.println("    @Override");
+    writer.println("    <R> R accept(Visitor<R> visitor) {");
+    writer.println("      return visitor.visit" +
+        className + baseName + "(this);");
+    writer.println("    }");
+
     writer.println("    }");
   }
 
