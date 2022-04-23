@@ -4,7 +4,9 @@ import com.craftinginterpreters.lox.Expr.Binary;
 import com.craftinginterpreters.lox.Expr.Grouping;
 import com.craftinginterpreters.lox.Expr.Literal;
 import com.craftinginterpreters.lox.Expr.Unary;
+import com.craftinginterpreters.lox.Expr.Variable;
 import com.craftinginterpreters.lox.Stmt.Expression;
+import com.craftinginterpreters.lox.Stmt.Var;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -14,28 +16,33 @@ import java.util.logging.Level;
  *
  * ---------------------------------
  *
- * program        → statement* EOF ;
+ * program        → declaration* EOF ;
+ *
+ * declaration    → varDecl
+ *                | statement ;
  *
  * statement      → exprStmt
- *                | printStmt ;
- *
- * exprStmt       → expression ";" ;
- * printStmt      → "print" expression ";" ;
+ *                | printStmt ; // only eval.
  *
  * ---------------------------------
  *
- * expression     → equality ;
+ * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+ *
+ * expression     → assignment ;
+ * assignment     → IDENTIFIER "=" assignment
+ *                | equality ;
  * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
  * term           → factor ( ( "-" | "+" ) factor )* ;
  * factor         → unary ( ( "/" | "*" ) unary )* ;
  * unary          → ( "!" | "-" ) unary
  *                | primary ;
- * primary        → NUMBER | STRING | "true" | "false" | "nil"
- *                | "(" expression ")" ;
+ * primary        → "true" | "false" | "nil"
+ *                | NUMBER | STRING
+ *                | "(" expression ")"
+ *                | IDENTIFIER ;        // the name of the variable being accessed.
  *
  * ---------------------------------
- *
  */
 public class Parser {
 
@@ -59,14 +66,43 @@ public class Parser {
   List<Stmt> parse() {
     List<Stmt> statements = new ArrayList<>();
     while (!isAtEnd()) {
-      statements.add(statement());
+//      statements.add(statement());
+      statements.add(declaration());
     }
 
     return statements;
   }
 
   private Expr expression() {
-    return equality();
+    return assignment();
+  }
+
+  private Expr assignment() {
+    Expr expr = equality();
+
+    if (match(TokenType.EQUAL)) {
+      Token equals = previous();
+      Expr value = assignment();
+
+      if (expr instanceof Expr.Variable) {
+        Token name = ((Expr.Variable)expr).name;
+        return new Expr.Assign(name, value);
+      }
+
+      error(equals, "Invalid assignment target.");
+    }
+
+    return expr;
+  }
+
+  private Stmt declaration() {
+    try {
+      if (match(TokenType.VAR)) return varDeclaration();
+      return statement();
+    } catch (ParseError error) {
+      synchronize();
+      return null;
+    }
   }
 
   /**
@@ -89,6 +125,11 @@ public class Parser {
   }
 
 
+  /**
+   * statement      → exprStmt
+   *                | printStmt ;
+   * @return
+   */
   private Stmt statement() {
     if (match(TokenType.PRINT)) return printStatement();
     return expressionStatement();
@@ -101,6 +142,19 @@ public class Parser {
     return new Stmt.Print(value);
   }
 
+
+  private Stmt varDeclaration() {
+    Token name = consume(TokenType.IDENTIFIER, "Expect variable name.");
+
+    Expr initializer = null;
+    if (match(TokenType.EQUAL)) {
+      initializer = expression();
+    }
+
+    consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+
+    return new Var(name, initializer);
+  }
 
   /**
    * we parse an expression followed by a semicolon.
@@ -194,6 +248,10 @@ public class Parser {
     if (match(TokenType.NUMBER, TokenType.STRING)) {
       // the match method consumes
       return new Expr.Literal(previous().literal);
+    }
+
+    if (match(TokenType.IDENTIFIER)) {
+      return new Expr.Variable(previous());
     }
 
     if (match(TokenType.LEFT_PAREN)) {
