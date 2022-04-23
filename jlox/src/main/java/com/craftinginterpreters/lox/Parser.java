@@ -77,15 +77,25 @@ public class Parser {
     return assignment();
   }
 
+
+  /**
+   * First parse the left-hand side, which could be equality() or any higher precedence
+   * If we find an =, we parse the right-hand side and
+   * then wrap it all up in an assignment expression tree node
+   * @return
+   */
   private Expr assignment() {
     Expr expr = equality();
 
     if (match(TokenType.EQUAL)) {
       Token equals = previous();
       Expr value = assignment();
+      // recurse to evaluate the right value,
+      // this will eventually lead to higher precedences
 
       if (expr instanceof Expr.Variable) {
         Token name = ((Expr.Variable)expr).name;
+        // cast Object to Expr.Variable
         return new Expr.Assign(name, value);
       }
 
