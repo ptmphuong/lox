@@ -4,11 +4,25 @@ import com.craftinginterpreters.lox.Expr.Binary;
 import com.craftinginterpreters.lox.Expr.Grouping;
 import com.craftinginterpreters.lox.Expr.Literal;
 import com.craftinginterpreters.lox.Expr.Unary;
+import com.craftinginterpreters.lox.Stmt.Expression;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 
 /**
  * is a top-down parser
+ *
+ * ---------------------------------
+ *
+ * program        → statement* EOF ;
+ *
+ * statement      → exprStmt
+ *                | printStmt ;
+ *
+ * exprStmt       → expression ";" ;
+ * printStmt      → "print" expression ";" ;
+ *
+ * ---------------------------------
  *
  * expression     → equality ;
  * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -19,6 +33,9 @@ import java.util.logging.Level;
  *                | primary ;
  * primary        → NUMBER | STRING | "true" | "false" | "nil"
  *                | "(" expression ")" ;
+ *
+ * ---------------------------------
+ *
  */
 public class Parser {
 
@@ -32,12 +49,20 @@ public class Parser {
   }
 
 
-  Expr parse() {
-    try {
-      return expression();
-    } catch (ParseError error) {
-      return null;
+//  Expr parse() {
+//    try {
+//      return expression();
+//    } catch (ParseError error) {
+//      return null;
+//    }
+//  }
+  List<Stmt> parse() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(statement());
     }
+
+    return statements;
   }
 
   private Expr expression() {
@@ -61,6 +86,31 @@ public class Parser {
     }
 
     return expr;
+  }
+
+
+  private Stmt statement() {
+    if (match(TokenType.PRINT)) return printStatement();
+    return expressionStatement();
+  }
+
+
+  private Stmt printStatement() {
+    Expr value = expression();
+    consume(TokenType.SEMICOLON, "Expect ';' after value.");
+    return new Stmt.Print(value);
+  }
+
+
+  /**
+   * we parse an expression followed by a semicolon.
+   * We wrap that Expr in a Stmt of the right type and return it.
+   * @return
+   */
+  private Stmt expressionStatement() {
+    Expr expr = expression();
+    consume(TokenType.SEMICOLON, "Expect ';' after expression.");
+    return new Expression(expr);
   }
 
 
