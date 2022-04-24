@@ -31,6 +31,7 @@ public class GenerateAst {
         outputDir,
         "Stmt",
         Arrays.asList(
+            "Block: List<Stmt> statements",
             "Expression: Expr expression",
             "Print: Expr Expression",
             "Var: Token name, Expr initializer"
