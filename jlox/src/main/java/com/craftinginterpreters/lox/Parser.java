@@ -3,11 +3,14 @@ package com.craftinginterpreters.lox;
 import com.craftinginterpreters.lox.Expr.Binary;
 import com.craftinginterpreters.lox.Expr.Grouping;
 import com.craftinginterpreters.lox.Expr.Literal;
+import com.craftinginterpreters.lox.Expr.Logical;
 import com.craftinginterpreters.lox.Expr.Unary;
 import com.craftinginterpreters.lox.Expr.Variable;
 import com.craftinginterpreters.lox.Stmt.Expression;
 import com.craftinginterpreters.lox.Stmt.Var;
+import com.craftinginterpreters.lox.Stmt.While;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -22,10 +25,22 @@ import java.util.logging.Level;
  *                | statement ;
  *
  * statement      → exprStmt
+ *                | forStmt
+ *                | ifStmt
  *                | printStmt
+ *                | whileStmt
  *                | block ;
  *
  * block          → "{" declaration* "}" ;
+ *
+ * forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+ *                  expression? ";"
+ *                  expression? ")" statement ;
+ *
+ * ifStmt         → "if" "(" expression ")" statement
+ *                ( "else" statement )? ;
+ *
+ * whileStmt      → "while" "(" expression ")" statement ;
  *
  * ---------------------------------
  *
@@ -33,7 +48,9 @@ import java.util.logging.Level;
  *
  * expression     → assignment ;
  * assignment     → IDENTIFIER "=" assignment
- *                | equality ;
+ *                | logic_or ;
+ * logic_or       → logic_and ( "or" logic_and )* ;
+ * logic_and      → equality ( "and" equality )* ;
  * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
  * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
  * term           → factor ( ( "-" | "+" ) factor )* ;
@@ -82,13 +99,15 @@ public class Parser {
 
 
   /**
+   *  * assignment     → IDENTIFIER "=" assignment
+   *  *                | logic_or ;
    * First parse the left-hand side, which could be equality() or any higher precedence
    * If we find an =, we parse the right-hand side and
    * then wrap it all up in an assignment expression tree node
    * @return
    */
   private Expr assignment() {
-    Expr expr = equality();
+    Expr expr = or();
 
     if (match(TokenType.EQUAL)) {
       Token equals = previous();
@@ -107,6 +126,38 @@ public class Parser {
 
     return expr;
   }
+
+
+  /**
+   * logic_or       → logic_and ( "or" logic_and )* ;
+   * logic_and      → equality ( "and" equality )* ;
+   * @return
+   */
+  private Expr or() {
+    Expr expr = and();
+
+    while (match(TokenType.OR)) {
+      Token operator = previous();
+      Expr right = and();
+      expr = new Logical(expr, operator, right);
+    }
+
+    return expr;
+  }
+
+
+  private Expr and() {
+    Expr expr = equality();
+
+    while (match(TokenType.AND)) {
+      Token operator = previous();
+      Expr right = equality();
+      expr = new Logical(expr, operator, right);
+    }
+
+    return expr;
+  }
+
 
   private Stmt declaration() {
     try {
@@ -140,14 +191,97 @@ public class Parser {
 
   /**
    * statement      → exprStmt
-   *                | printStmt ;
+   *                | ifStmt
+   *                | printStmt
+   *                | block ;
    * @return
    */
   private Stmt statement() {
+    if (match(TokenType.IF)) return ifStatement();
     if (match(TokenType.PRINT)) return printStatement();
+    if (match(TokenType.FOR)) return forStatement();
+    if (match(TokenType.WHILE)) return whileStatement();
     if (match(TokenType.LEFT_BRACE)) return new Stmt.Block(block());
     return expressionStatement();
   }
+
+
+  /**
+   * forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+   *                  expression? ";"
+   *                  expression? ")" statement ;
+   * @return
+   */
+  private Stmt forStatement() {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+
+    Stmt initializer = null;
+    if (match(TokenType.SEMICOLON)) {
+      initializer = null;
+    } else if (match(TokenType.VAR)) {
+      initializer = varDeclaration();
+    } else {
+      initializer = expressionStatement();
+    }
+
+    Expr condition = null;
+    if (!check(TokenType.SEMICOLON)) {
+      condition = expression();
+    }
+    consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
+
+    Expr increment = null;
+    if (!check(TokenType.RIGHT_PAREN)) {
+      increment = expression();
+    }
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+
+    Stmt body = statement();
+
+    //  body with a little block
+    //  that contains the original body
+    //  followed by an expression statement that evaluates the increment.
+    if (increment != null) {
+      body = new Stmt.Block(
+          Arrays.asList(
+              body,
+              new Stmt.Expression(increment)
+          )
+      );
+    }
+
+    if (condition == null) condition = new Expr.Literal(true);
+    body = new Stmt.While(condition, body);
+
+    if (initializer != null) {
+      body = new Stmt.Block(Arrays.asList(initializer, body));
+    }
+
+    return body;
+  }
+
+
+  /**
+   * ifStmt         → "if" "(" expression ")" statement
+   *                ( "else" statement )? ;
+   * @return
+   */
+  private Stmt ifStatement() {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
+    Expr condition = expression();
+    consume(TokenType.RIGHT_BRACE, "Expect ')' after if condition.");
+
+    Stmt thenBranch = statement();
+    Stmt elseBranch = null;
+    if (match(TokenType.ELSE)) {
+      elseBranch = statement();
+    }
+
+    return new Stmt.If(condition, thenBranch, elseBranch);
+  }
+
+
+
 
   private List<Stmt> block() {
     List<Stmt> statements = new ArrayList<>();
@@ -179,6 +313,19 @@ public class Parser {
     consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
 
     return new Var(name, initializer);
+  }
+
+  /**
+   * whileStmt      → "while" "(" expression ")" statement ;
+   * @return
+   */
+  private Stmt whileStatement() {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+    Expr condition = expression();
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after while condition.");
+    Stmt body = statement();
+
+    return new While(condition, body);
   }
 
   /**
