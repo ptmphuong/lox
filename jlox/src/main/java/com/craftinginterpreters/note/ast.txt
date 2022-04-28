@@ -1,0 +1,49 @@
+ Features: evaluation, variable binding, control flow.
+ * ---------------------------------
+ *
+ * program        → declaration* EOF ;
+ *
+ * declaration    → varDecl
+ *                | statement ;
+ *
+ * statement      → exprStmt
+ *                | forStmt
+ *                | ifStmt
+ *                | printStmt
+ *                | whileStmt
+ *                | block ;
+ *
+ * block          → "{" declaration* "}" ;
+ *
+ * forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+ *                  expression? ";"
+ *                  expression? ")" statement ;
+ *
+ * ifStmt         → "if" "(" expression ")" statement
+ *                ( "else" statement )? ;
+ *
+ * whileStmt      → "while" "(" expression ")" statement ;
+ *
+ * ---------------------------------
+ *
+ * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+ *
+ * expression     → assignment ;
+ * assignment     → IDENTIFIER "=" assignment
+ *                | logic_or ;
+ * logic_or       → logic_and ( "or" logic_and )* ;
+ * logic_and      → equality ( "and" equality )* ;
+ * equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+ * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+ * term           → factor ( ( "-" | "+" ) factor )* ;
+ * factor         → unary ( ( "/" | "*" ) unary )* ;
+ * unary          → ( "!" | "-" ) unary
+ *                | primary ;
+ * primary        → "true" | "false" | "nil"
+ *                | NUMBER | STRING
+ *                | "(" expression ")"
+ *                | IDENTIFIER ;        // the name of the variable being accessed.
+ *
+ * ---------------------------------
+
+

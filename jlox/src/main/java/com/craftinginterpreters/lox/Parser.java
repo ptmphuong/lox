@@ -7,12 +7,12 @@ import com.craftinginterpreters.lox.Expr.Logical;
 import com.craftinginterpreters.lox.Expr.Unary;
 import com.craftinginterpreters.lox.Expr.Variable;
 import com.craftinginterpreters.lox.Stmt.Expression;
+import com.craftinginterpreters.lox.Stmt.Function;
 import com.craftinginterpreters.lox.Stmt.Var;
 import com.craftinginterpreters.lox.Stmt.While;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.logging.Level;
 
 /**
  * is a top-down parser
@@ -21,17 +21,25 @@ import java.util.logging.Level;
  *
  * program        → declaration* EOF ;
  *
- * declaration    → varDecl
+ * declaration    → funDecl
+ *                | varDecl
  *                | statement ;
  *
  * statement      → exprStmt
  *                | forStmt
  *                | ifStmt
  *                | printStmt
+ *                | returnStmt
  *                | whileStmt
  *                | block ;
  *
+ * funDecl        → "fun" function ;
+ * function       → IDENTIFIER "(" parameters? ")" block ;
+ * parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
+ *
  * block          → "{" declaration* "}" ;
+ *
+ * returnStmt     → "return" expression? ";" ;
  *
  * forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
  *                  expression? ";"
@@ -45,6 +53,7 @@ import java.util.logging.Level;
  * ---------------------------------
  *
  * varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+ * arguments      → expression ( "," expression )* ;
  *
  * expression     → assignment ;
  * assignment     → IDENTIFIER "=" assignment
@@ -55,8 +64,8 @@ import java.util.logging.Level;
  * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
  * term           → factor ( ( "-" | "+" ) factor )* ;
  * factor         → unary ( ( "/" | "*" ) unary )* ;
- * unary          → ( "!" | "-" ) unary
- *                | primary ;
+ * unary          → ( "!" | "-" ) unary | call ;
+ * call           → primary ( "(" arguments? ")" )* ;
  * primary        → "true" | "false" | "nil"
  *                | NUMBER | STRING
  *                | "(" expression ")"
@@ -161,6 +170,7 @@ public class Parser {
 
   private Stmt declaration() {
     try {
+      if (match(TokenType.FUN)) return function("function");
       if (match(TokenType.VAR)) return varDeclaration();
       return statement();
     } catch (ParseError error) {
@@ -199,6 +209,7 @@ public class Parser {
   private Stmt statement() {
     if (match(TokenType.IF)) return ifStatement();
     if (match(TokenType.PRINT)) return printStatement();
+    if (match(TokenType.RETURN)) return returnStatement();
     if (match(TokenType.FOR)) return forStatement();
     if (match(TokenType.WHILE)) return whileStatement();
     if (match(TokenType.LEFT_BRACE)) return new Stmt.Block(block());
@@ -269,7 +280,7 @@ public class Parser {
   private Stmt ifStatement() {
     consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
     Expr condition = expression();
-    consume(TokenType.RIGHT_BRACE, "Expect ')' after if condition.");
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.");
 
     Stmt thenBranch = statement();
     Stmt elseBranch = null;
@@ -279,9 +290,6 @@ public class Parser {
 
     return new Stmt.If(condition, thenBranch, elseBranch);
   }
-
-
-
 
   private List<Stmt> block() {
     List<Stmt> statements = new ArrayList<>();
@@ -294,6 +302,17 @@ public class Parser {
     return statements;
   }
 
+
+  private Stmt returnStatement() {
+   Token keyword = previous();
+   Expr value = null;
+   if (!check(TokenType.SEMICOLON)) {
+     value = expression();
+   }
+
+   consume(TokenType.SEMICOLON, "Expect ';' after return value");
+   return new Stmt.Return(keyword, value);
+  }
 
   private Stmt printStatement() {
     Expr value = expression();
@@ -339,6 +358,28 @@ public class Parser {
     return new Expression(expr);
   }
 
+
+  private Stmt.Function function(String kind) {
+    Token name = consume(TokenType.IDENTIFIER, "Expect " + kind + " name.");
+
+    consume(TokenType.LEFT_PAREN, "Expect '(' after " + kind + " name.");
+    List<Token> parameters = new ArrayList<>();
+    if (!check(TokenType.RIGHT_PAREN)) {
+      do {
+        if (parameters.size() >= 255) {
+          error(peek(), "Can't have more than 255 parameters.");
+        }
+        parameters.add(
+            consume(TokenType.IDENTIFIER, "Expect parameter name.")
+        );
+      } while (match(TokenType.COMMA));
+    }
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters");
+
+    consume(TokenType.LEFT_BRACE, "Expect '{' before " + kind + "body.");
+    List<Stmt> body = block();
+    return new Stmt.Function(name, parameters, body);
+  }
 
   /**
    * comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -403,7 +444,47 @@ public class Parser {
       return new Unary(operator, right);
     }
 
-    return primary();
+    return call();
+  }
+
+
+  /**
+   * call           → primary ( "(" arguments? ")" )* ;
+   * While loop:
+   *  each time we see a (, we call finishCall() to parse the call expression
+   *  using the previously parsed expression as the callee.
+   *  The returned expression becomes the new expr and we loop to see if the result is itself called.
+   * @return
+   */
+  private Expr call() {
+    Expr expr = primary();
+
+    while (true) {
+      if (match(TokenType.LEFT_PAREN)) {
+        expr = finishCall(expr);
+      } else {
+        break;
+      }
+    }
+
+    return expr;
+  }
+
+
+  private Expr finishCall(Expr callee) {
+    List<Expr> arguments = new ArrayList<>();
+    if (!check(TokenType.RIGHT_PAREN)) {
+      do {
+        if (arguments.size() >= 255) {
+          error(peek(), "Can't have more than 255 arguments.");
+        }
+        arguments.add(expression());
+      } while (match(TokenType.COMMA));
+    }
+
+    Token paren = consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
+
+    return new  Expr.Call(callee, paren, arguments);
   }
 
 
