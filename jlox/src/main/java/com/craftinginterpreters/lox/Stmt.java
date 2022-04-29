@@ -75,9 +75,9 @@ abstract class Stmt {
     }
 
   static class Print extends Stmt {
-    final Expr Expression;
+    final Expr expression;
     Print (Expr Expression) {
-      this.Expression = Expression;
+      this.expression = Expression;
       }
 
     @Override
