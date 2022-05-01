@@ -165,6 +165,21 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     return function.call(this, arguments);
   }
 
+  @Override
+  public Object visitGetExpr(Expr.Get expr) {
+    Object object = evaluate(expr.object);
+    if (object instanceof LoxInstance) {
+      return ((LoxInstance) object).get(expr.name);
+    }
+
+    // If the object is some other type like a number,
+    // invoking a getter on it is a runtime error.
+    throw new RuntimeError(
+            expr.name,
+            "Only instances have properties."
+    );
+  }
+
 
   private void checkNumberOperands(Token operator, Object left, Object right) {
     if (left instanceof Double && right instanceof Double) return;

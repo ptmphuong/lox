@@ -61,7 +61,7 @@ import java.util.List;
  * arguments      → expression ( "," expression )* ;
  *
  * expression     → assignment ;
- * assignment     → IDENTIFIER "=" assignment
+ * assignment     → ( call "." )? IDENTIFIER "=" assignment
  *                | logic_or ;
  * logic_or       → logic_and ( "or" logic_and )* ;
  * logic_and      → equality ( "and" equality )* ;
@@ -70,7 +70,7 @@ import java.util.List;
  * term           → factor ( ( "-" | "+" ) factor )* ;
  * factor         → unary ( ( "/" | "*" ) unary )* ;
  * unary          → ( "!" | "-" ) unary | call ;
- * call           → primary ( "(" arguments? ")" )* ;
+ * call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
  * primary        → "true" | "false" | "nil"
  *                | NUMBER | STRING
  *                | "(" expression ")"
@@ -481,6 +481,10 @@ public class Parser {
     while (true) {
       if (match(TokenType.LEFT_PAREN)) {
         expr = finishCall(expr);
+      } else if (match(TokenType.DOT)) {
+        Token name = consume(TokenType.IDENTIFIER,
+                "Expect property name after '.'.");
+        expr = new Expr.Get(expr, name);
       } else {
         break;
       }

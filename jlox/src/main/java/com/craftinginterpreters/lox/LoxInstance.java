@@ -1,13 +1,28 @@
 package com.craftinginterpreters.lox;
 
+import javax.naming.ldap.HasControls;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * the runtime representation of an instance of a Lox class.
  */
 public class LoxInstance {
     private LoxClass klass;
+    private Map<String, Object> fields = new HashMap<>();
 
     LoxInstance(LoxClass klass) {
         this.klass = klass;
+    }
+
+    Object get(Token name) {
+        if (fields.containsKey(name.lexeme)) {
+            return fields.get(name.lexeme);
+        }
+        throw new RuntimeError(
+                name,
+                "Undefined property '" + name.lexeme + "'."
+        );
     }
 
     @Override
