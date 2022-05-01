@@ -21,7 +21,11 @@ import java.util.List;
  *
  * program        → declaration* EOF ;
  *
- * declaration    → funDecl
+ * declaration    → classDecl
+ *                | funDecl
+ *                | varDecl
+ *                | statement ;
+ *
  *                | varDecl
  *                | statement ;
  *
@@ -33,6 +37,7 @@ import java.util.List;
  *                | whileStmt
  *                | block ;
  *
+ * classDecl      → "class" IDENTIFIER "{" function* "}" ;
  * funDecl        → "fun" function ;
  * function       → IDENTIFIER "(" parameters? ")" block ;
  * parameters     → IDENTIFIER ( "," IDENTIFIER )* ;

@@ -6,23 +6,40 @@ import java.util.Map;
 import java.util.Stack;
 
 /**
- * A block statement introduces a new scope for the statements it contains.
+ * A static analysis to resolve variable bindings
+ *      Capture closures
+ *      Provide distance from the current scope to the enclosing scope where the value is declared
  *
- * A function declaration introduces a new scope for its body and binds its parameters in that scope.
+ * Make sure return statement is declared within a function
  *
- * A variable declaration adds a new variable to the current scope.
+ * ------------------------------
+ * Resolve bindings:
+ *      A block statement introduces a new scope for the statements it contains.
  *
- * Variable and assignment expressions need to have their variables resolved.
+ *      A function declaration introduces a new scope for its body
+ *      and binds its parameters in that scope.
+ *
+ *      A variable declaration adds a new variable to the current scope.
+ *
+ *      Variable and assignment expressions need to have their variables resolved.
  */
 public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     private final Interpreter interpreter;
+
+    // keeps track of the stack of scopes currently, uh, in scope.
+    // Each element in the stack is a Map representing a single block scope.
+    // Keys, as in Environment, are variable names.
+    // The value associated with a key in the scope map represents whether
+    // we have finished resolving that variable’s initializer
     private final Stack<Map<String, Boolean>> scopes = new Stack<>();
+
+    // make sure a return stmt is always declared inside a function.
+    private FunctionType currentFunction = FunctionType.NONE;
 
     Resolver(Interpreter interpreter) {
         this.interpreter = interpreter;
     }
-
 
     @Override
     public Void visitAssignExpr(Expr.Assign expr) {
@@ -72,6 +89,11 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         return null;
     }
 
+    /**
+     * Variable and assignment expressions need to have their variables resolved.
+     * @param expr
+     * @return
+     */
     @Override
     public Void visitVariableExpr(Expr.Variable expr) {
 
@@ -87,6 +109,11 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         return null;
     }
 
+    /**
+     * A block statement introduces a new scope for the statements it contains.
+     * @param stmt
+     * @return
+     */
     @Override
     public Void visitBlockStmt(Stmt.Block stmt) {
         beginScope();
@@ -101,6 +128,13 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         return null;
     }
 
+    /**
+     *
+     * A function declaration introduces a new scope for its body
+     * and binds its parameters in that scope.
+     * @param stmt
+     * @return
+     */
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
         // we define the name eagerly, before resolving the function’s body.
@@ -108,7 +142,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         declare(stmt.name);
         define(stmt.name);
 
-        resolveFunction(stmt);
+        resolveFunction(stmt, FunctionType.FUNCTION);
         return null;
     }
 
@@ -128,10 +162,21 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitReturnStmt(Stmt.Return stmt) {
+        if (currentFunction == FunctionType.NONE) {
+            Lox.error(
+                    stmt.keyword,
+                    "Can't return from top-level code."
+            );
+        }
         if (stmt.value != null) resolve(stmt.value);
         return null;
     }
 
+    /**
+     * A variable declaration adds a new variable to the current scope.
+     * @param stmt
+     * @return
+     */
     @Override
     public Void visitVarStmt(Stmt.Var stmt) {
         declare(stmt.name);
@@ -171,10 +216,24 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         scopes.pop();
     }
 
+    /**
+     * Declaration adds the variable to the innermost scope so that
+     * it shadows any outer one and so that we know the variable exists.
+     * We mark it as “not ready yet” by binding its name to false in the scope map.
+     * @param name
+     */
     private void declare(Token name) {
         if (scopes.isEmpty()) return;
 
         Map<String, Boolean> scope = scopes.peek();
+
+        if (scope.containsKey(name.lexeme)) {
+            Lox.error(
+                    name,
+                    "Already a variable with this name in this scope."
+            );
+        }
+
         scope.put(name.lexeme, false);
     }
 
@@ -188,6 +247,15 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         scopes.peek().put(name.lexeme, true);
     }
 
+    /**
+     * Each time it visits a variable, it tells the interpreter how many scopes there are
+     * between the current scope and the scope where the variable is defined.
+     *
+     * At runtime, this corresponds exactly to the number of environments between
+     * the current one and the enclosing one where the interpreter can find the variable’s value.
+     * @param expr
+     * @param name
+     */
     private void resolveLocal(Expr expr, Token name) {
         for (int i = scopes.size() - 1; i >= 0; i--) {
             if (scopes.get(i).containsKey(name.lexeme)) {
@@ -197,7 +265,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
     }
 
-    private void resolveFunction(Stmt.Function function) {
+    private void resolveFunction(Stmt.Function function, FunctionType functionType) {
+        FunctionType enclosingFunction = currentFunction;
+        currentFunction = functionType;
+
         beginScope();
         for (Token param: function.params) {
             declare(param);
@@ -205,5 +276,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
         resolve(function.body);
         endScope();
+
+        currentFunction = enclosingFunction;
     }
 }

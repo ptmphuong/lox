@@ -20,6 +20,10 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   // variables stay in memory as long as the interpreter is still running.
   final Environment globals = new Environment();
   private Environment environment = globals;
+
+  // store the resolution information.
+  // Key: Expr, Value: The distance between the current scope ~ the enclosing scope
+  // where the value of the Key can be found.
   private final Map<Expr, Integer> locals = new HashMap<>();
 
   Interpreter() {
@@ -65,6 +69,12 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     stmt.accept(this);
   }
 
+  /**
+   *  corresponds exactly to the number of environments between
+   *  the current one and the enclosing one where the interpreter can find the variable’s value.
+   * @param expr
+   * @param depth
+   */
   void resolve(Expr expr, int depth) {
     locals.put(expr, depth);
   }
@@ -72,7 +82,13 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   @Override
   public Object visitAssignExpr(Assign expr) {
     Object value = evaluate(expr.value);
-    environment.assign(expr.name, value);
+//    environment.assign(expr.name, value);
+    Integer distance = locals.get(expr);
+    if (distance != null) {
+      environment.assignAt(distance, expr.name, value);
+    } else {
+      globals.assign(expr.name, value);
+    }
     return value;
   }
 
@@ -318,6 +334,17 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
   @Override
   public Object visitVariableExpr(Variable expr) {
-    return environment.get(expr.name);
+//    return environment.get(expr.name);
+    return lookUpVariable(expr.name, expr);
   }
+
+  private Object lookUpVariable(Token name, Expr expr) {
+    Integer distance = locals.get(expr);
+    if (distance != null) {
+      return environment.getAt(distance, name.lexeme);
+    } else {
+      return globals.get(name);
+    }
+  }
+
 }
