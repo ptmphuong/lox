@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Stack;
 
 /**
- * A static analysis to resolve variable bindings
+ * A static analysis to resolve variable bindings | Type checker
  *      Capture closures
  *      Provide distance from the current scope to the enclosing scope where the value is declared
  *
@@ -159,7 +159,11 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         scopes.peek().put("this", true);
 
         for (Stmt.Function method: stmt.methods) {
-            resolveFunction(method, FunctionType.METHOD);
+            FunctionType declaration = FunctionType.METHOD;
+            if (method.name.lexeme.equals("init")) {
+                declaration = FunctionType.INITIALIZER;
+            }
+            resolveFunction(method, FunctionType.INITIALIZER);
         }
 
         endScope();
@@ -213,7 +217,13 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
                     "Can't return from top-level code."
             );
         }
-        if (stmt.value != null) resolve(stmt.value);
+        if (stmt.value != null) {
+            if (currentFunction == FunctionType.INITIALIZER) {
+                Lox.error(stmt.keyword,
+                        "Can't return a value from an initializer.");
+            }
+            resolve(stmt.value);
+        }
         return null;
     }
 
