@@ -74,6 +74,7 @@ import java.util.List;
  * primary        → "true" | "false" | "nil"
  *                | NUMBER | STRING
  *                | "(" expression ")"
+ *                | this
  *                | IDENTIFIER ;        // the name of the variable being accessed.
  *
  * ---------------------------------
@@ -528,6 +529,8 @@ public class Parser {
       // the match method consumes
       return new Expr.Literal(previous().literal);
     }
+
+    if (match(TokenType.THIS)) return new Expr.This(previous());
 
     if (match(TokenType.IDENTIFIER)) {
       return new Expr.Variable(previous());
